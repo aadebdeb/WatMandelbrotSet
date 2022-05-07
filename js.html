@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Mandelbrot Set by JavaScript</title>
+  </head>
+  <body>
+    <h1>Mandelbrot Set by JavaScript</h1>
+    <canvas id="canvas"></canvas>
+    <div>
+      <input type="range" id="sliderX" name="sliderX"
+        value="-0.65" min="-2" max="2" step="0.05">
+      <label for="sliderX">X</label>
+    </div>
+    <div>
+      <input type="range" id="sliderY" name="sliderY"
+        value="0" min="-2" max="2" value="0" step="0.05">
+      <label for="sliderY">Y</label>
+    </div>
+    <div>
+      <input type="range" id="sliderZoom" name="sliderZoom"
+        value="1.7" min="1.0" max="10.0" step="0.05">
+      <label for="sliderZoom">Zoom</label>
+    </div>
+    <div id="performance"></div>
+    <script>
+
+      class Complex {
+        constructor(real, imaginary) {
+          this.real = real;
+          this.imaginary = imaginary;
+        }
+
+        static add(c0, c1) {
+          return new Complex(c0.real + c1.real, c0.imaginary + c1.imaginary);
+        }
+
+        static mul(c0, c1) {
+          return new Complex(
+            c0.real * c1.real - c0.imaginary * c1.imaginary,
+            c0.real * c1.imaginary + c1.real * c0.imaginary
+          );
+        }
+
+        static square(c) {
+          return Complex.mul(c, c);
+        }
+
+        squareLength() {
+          return this.real * this.real + this.imaginary + this.imaginary;
+        }
+
+        clone() {
+          return new Complex(this.real, this.imaginary);
+        }
+      }
+
+      class MandelbrotSet {
+        constructor(width, height, maxIteration) {
+          this._width = width;
+          this._height = height;
+          this._maxIteration = maxIteration;
+          const arrayLength = this._width * this._height * 4; // width * height * 4(RGBA)
+          this._array = new Uint8ClampedArray(arrayLength);
+          this.imageData = new ImageData(this._array, width, height);
+        }
+
+        update(minX, minY, stepX, stepY) {
+          for (let y = 0; y < this._height; ++y) {
+            for (let x = 0; x < this._width; ++x) {
+              const constant = new Complex(minX + x * stepX, minY + y * stepY);
+              const divergenceStep = this._calculateDivergenceStep(constant);
+              const color = Math.floor(divergenceStep / (this._maxIteration - 1) * 255);
+              this._drawPixel(x, y, color);
+            }
+          }
+        }
+
+        _calculateDivergenceStep(constant) {
+          let current = constant.clone();
+          for (let i = 0; i < this._maxIteration - 1; ++i) {
+            if (current.squareLength() > 4) {
+              return i;
+            }
+            current = Complex.add(Complex.square(current), constant);
+          }
+          return this._maxIteration - 1;
+        }
+
+        _drawPixel(x, y, color) {
+          const index = (x + y * this._width) * 4;
+          this._array[index] = color;
+          this._array[index + 1] = color;
+          this._array[index + 2] = color;
+          this._array[index + 3] = 255;
+        }
+      }
+
+      const width = 512;
+      const height = 512;
+
+      const canvas = document.getElementById('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+
+      const sliderX = document.getElementById('sliderX');
+      const sliderY = document.getElementById('sliderY');
+      const sliderZoom = document.getElementById('sliderZoom');
+      const divPerformance = document.getElementById('performance');
+
+      const mandelbrotSet = new MandelbrotSet(width, height, 128);
+
+      const render = () => {
+        const x = parseFloat(sliderX.value);
+        const y = parseFloat(sliderY.value);
+        const zoom = parseFloat(sliderZoom.value);
+
+        const rangeX = 4.0 / zoom;
+        const rangeY = 4.0 / zoom * height / width;
+        const minX = -0.5 * rangeX + x;
+        const minY = -0.5 * rangeY + y;
+
+        const startTime = performance.now();
+        mandelbrotSet.update(minX, minY, rangeX / width, rangeY / height);
+        const endTime = performance.now();
+        const elapsedMillsecs = endTime - startTime;
+        divPerformance.innerText = `Time(ms): ${elapsedMillsecs}`;
+        context.putImageData(mandelbrotSet.imageData, 0, 0);
+      }
+
+      sliderX.addEventListener('input', render);
+      sliderY.addEventListener('input', render);
+      sliderZoom.addEventListener('input', render);
+
+      render();
+
+    </script>
+  </body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Mandelbrot Set by WAT (WebAssembly Text Format)</title>
+  </head>
+  <body>
+    <h1>Mandelbrot Set by WAT (WebAssembly Text Format)</h1>
+    <canvas id="canvas"></canvas>
+    <div>
+      <input type="range" id="sliderX" name="sliderX"
+        value="-0.65" min="-2" max="2" step="0.05">
+      <label for="sliderX">X</label>
+    </div>
+    <div>
+      <input type="range" id="sliderY" name="sliderY"
+        value="0" min="-2" max="2" value="0" step="0.05">
+      <label for="sliderY">Y</label>
+    </div>
+    <div>
+      <input type="range" id="sliderZoom" name="sliderZoom"
+        value="1.7" min="1.0" max="10.0" step="0.05">
+      <label for="sliderZoom">Zoom</label>
+    </div>
+    <div id="performance"></div>
+    <script>
+
+      class MandelbrotSetWasm {
+        constructor(width, height, maxIteration) {
+          this._width = width;
+          this._height = height;
+          this._maxIteration = maxIteration;
+          const arrayLength = this._width * this._height * 4; // width * height * 4(RGBA)
+          const page = Math.ceil(arrayLength / 65536); // 1page = 64kB = 65536B
+          this._memory = new WebAssembly.Memory({ initial: page });
+          this.imageData = new ImageData(
+            new Uint8ClampedArray(this._memory.buffer, 0, arrayLength), width, height
+          );
+          this._wasm = null;
+        }
+
+        async prepare() {
+          const importObject = {
+            env: {
+              memory: this._memory,
+              width,
+              height,
+              maxIteration: this._maxIteration,
+            }
+          };
+          this._wasm = await WebAssembly.instantiateStreaming(
+            fetch('./mandelbrot.wasm'), importObject);
+        }
+
+        update(minX, minY, stepX, stepY) {
+          if (!this._wasm) {
+            console.warn('MandelbrotSetWam#prepare must be called before MandelbrotSetWasm#update.');
+            return;
+          }
+          this._wasm.instance.exports.update(minX, minY, stepX, stepY);
+        }
+      }
+
+      const width = 512;
+      const height = 512;
+
+      const canvas = document.getElementById('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+
+      const sliderX = document.getElementById('sliderX');
+      const sliderY = document.getElementById('sliderY');
+      const sliderZoom = document.getElementById('sliderZoom');
+      const divPerformance = document.getElementById('performance');
+
+      const mandelbrotSet = new MandelbrotSetWasm(width, height, 128);
+
+      (async () => {
+        await mandelbrotSet.prepare();
+
+        const render = () => {
+          const x = parseFloat(sliderX.value);
+          const y = parseFloat(sliderY.value);
+          const zoom = parseFloat(sliderZoom.value);
+
+          const rangeX = 4.0 / zoom;
+          const rangeY = 4.0 / zoom * height / width;
+          const minX = -0.5 * rangeX + x;
+          const minY = -0.5 * rangeY + y;
+
+          const startTime = performance.now();
+          mandelbrotSet.update(minX, minY, rangeX / width, rangeY / height);
+          const endTime = performance.now();
+          const elapsedMillsecs = endTime - startTime;
+          divPerformance.innerText = `Time(ms): ${elapsedMillsecs}`;
+          context.putImageData(mandelbrotSet.imageData, 0, 0);
+        }
+
+        sliderX.addEventListener('input', render);
+        sliderY.addEventListener('input', render);
+        sliderZoom.addEventListener('input', render);
+
+        render();
+      })();
+
+    </script>
+  </body>
+</html>
